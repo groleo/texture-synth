@@ -70,26 +70,26 @@ def GetBestPatches(px):
 #-----------------------------------------------------------------------------------------------#
 #|                              Quilting and related Functions                                 |#
 #-----------------------------------------------------------------------------------------------#
-def SumOfSquaredDifferences_mono( offset_x, offset_y, outPx, inpPx ):
-    block_0 = g_img_out[outPx[0] + offset_x, outPx[1] + offset_y]
-    block_1 = g_img_inp[inpPx[0] + offset_x, inpPx[1] + offset_y]
+def SumOfSquaredDifferences_mono( offset_row, offset_col, outPx, inpPx ):
+    block_0 = g_img_out[outPx[0] + offset_row, outPx[1] + offset_col]
+    block_1 = g_img_inp[inpPx[0] + offset_row, inpPx[1] + offset_col]
     err_r = int(block_0[0]) - int(block_1[0])
     err_g = int(block_0[1]) - int(block_1[1])
     err_b = int(block_0[2]) - int(block_1[2])
     err_mono = (0.2125 * err_r**2) + (0.7154 * err_g**2) + (0.0721 * err_b**2);
     return err_mono
 
-def SumOfSquaredDifferences_rgbmean( offset_x, offset_y, outPx, inpPx ):
-    block_0 = g_img_out[outPx[0] + offset_x, outPx[1] + offset_y]
-    block_1 = g_img_inp[inpPx[0] + offset_x, inpPx[1] + offset_y]
+def SumOfSquaredDifferences_rgbmean( offset_row, offset_col, outPx, inpPx ):
+    block_0 = g_img_out[outPx[0] + offset_row, outPx[1] + offset_col]
+    block_1 = g_img_inp[inpPx[0] + offset_row, inpPx[1] + offset_col]
     err_r = int(block_0[0]) - int(block_1[0])
     err_g = int(block_0[1]) - int(block_1[1])
     err_b = int(block_0[2]) - int(block_1[2])
     return (err_r**2 + err_g**2 + err_b**2)/3.0
 
 
-def SSD(offset_x, offset_y, outPx, inpPx):
-    return SumOfSquaredDifferences_mono(offset_x, offset_y, outPx, inpPx)
+def SSD(offset_row, offset_col, outPx, inpPx):
+    return SumOfSquaredDifferences_mono(offset_row, offset_col, outPx, inpPx)
 
 # 2.1 Minimum Error Boundary Cut
 def MinimumErrorVerticalCut(outPx, inpPx):
