@@ -262,7 +262,7 @@ def MinimumErrorCut(block_left, block_above, block_next, overlap_size):
         BoundaryHorizntl = FindMinCostPathHorizntl(CostHorizntl)
         return (BoundaryVertical,BoundaryHorizntl)
 ###################################################
-def QuiltPatches(block_left, block_next, boundary):
+def QuiltPatches(block_left, block_next, boundaries):
     if block_left is None:
         print "caca"
         return block_next
@@ -310,16 +310,16 @@ def main():
                                      ,i_texture
                                      ,block_size
                                      )
-                boundary = MinimumErrorCut(
+                boundaries = MinimumErrorCut(
                                            block_left
                                           ,block_above
                                           ,block_next
                                           ,overlap_size
                                           )
-                block_qlt = QuiltPatches(
-                                          block_left
+                block_qlt = QuiltBlockAbove(
+                                          block_above
                                          ,block_next
-                                         ,boundary
+                                         ,boundaries
                                          )
                 PutBlock(
                           o_cur_row

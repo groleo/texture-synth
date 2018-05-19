@@ -9,9 +9,8 @@ from random import randint
 #---------------------------------------------------------------------------------------#
 #|                      Best Fit Patch and related functions                           |#
 #---------------------------------------------------------------------------------------#
-def OverlapErrorVertical( outPx, inpPx ):
-    iLeft,jLeft = outPx
-    iRight,jRight = inpPx
+def OverlapErrorVertical( iLeft, jLeft, inpLoc ):
+    iRight,jRight = inpLoc
     OverlapErr = 0
     diff = np.zeros((3))
     for i in range( g_PatchSize ):
@@ -22,8 +21,7 @@ def OverlapErrorVertical( outPx, inpPx ):
             OverlapErr += (diff[0]**2 + diff[1]**2 + diff[2]**2)**0.5
     return OverlapErr
 
-def OverlapErrorHorizntl( leftPx, rightPx ):
-    iLeft,jLeft = leftPx
+def OverlapErrorHorizntl( iLeft, jLeft, rightPx ):
     iRight,jRight = rightPx
     OverlapErr = 0
     diff = np.zeros((3))
@@ -35,22 +33,30 @@ def OverlapErrorHorizntl( leftPx, rightPx ):
             OverlapErr += (diff[0]**2 + diff[1]**2 + diff[2]**2)**0.5
     return OverlapErr
 
-def GetBestPatches(px):
+def GetBestPatches(px_row,px_col):
     PixelList = []
     #check for top layer
-    if px[0] == 0:
+    if px_row == 0:
         for i in range(g_sample_height - g_PatchSize):
             for j in range(g_OverlapWidth, g_sample_width - g_PatchSize ):
-                error = OverlapErrorVertical( (px[0], px[1] - g_OverlapWidth), (i, j - g_OverlapWidth)  )
+                error = OverlapErrorVertical(
+                          px_row
+                        , px_col - g_OverlapWidth
+                        , (i, j - g_OverlapWidth)
+                        )
                 if error  < g_ErrThreshold:
                     PixelList.append((i,j))
                 elif error < g_ErrThreshold/2:
                     return [(i,j)]
     #check for leftmost layer
-    elif px[1] == 0:
+    elif px_col == 0:
         for i in range(g_OverlapWidth, g_sample_height - g_PatchSize ):
             for j in range(g_sample_width - g_PatchSize):
-                error = OverlapErrorHorizntl( (px[0] - g_OverlapWidth, px[1]), (i - g_OverlapWidth, j)  )
+                error = OverlapErrorHorizntl(
+                          px_row - g_OverlapWidth
+                        , px_col
+                        , (i - g_OverlapWidth, j)
+                        )
                 if error  < g_ErrThreshold:
                     PixelList.append((i,j))
                 elif error < g_ErrThreshold/2:
@@ -59,8 +65,16 @@ def GetBestPatches(px):
     else:
         for i in range(g_OverlapWidth, g_sample_height - g_PatchSize):
             for j in range(g_OverlapWidth, g_sample_width - g_PatchSize):
-                error_Vertical   = OverlapErrorVertical( (px[0], px[1] - g_OverlapWidth), (i,j - g_OverlapWidth)  )
-                error_Horizntl   = OverlapErrorHorizntl( (px[0] - g_OverlapWidth, px[1]), (i - g_OverlapWidth,j) )
+                error_Vertical   = OverlapErrorVertical(
+                                          px_row
+                                        , px_col - g_OverlapWidth
+                                        , (i,j - g_OverlapWidth)
+                                        )
+                error_Horizntl   = OverlapErrorHorizntl(
+                                          px_row - g_OverlapWidth
+                                        , px_col
+                                        , (i - g_OverlapWidth,j)
+                                        )
                 if error_Vertical  < g_ErrThreshold and error_Horizntl < g_ErrThreshold:
                     PixelList.append((i,j))
                 elif error_Vertical < g_ErrThreshold/2 and error_Horizntl < g_ErrThreshold/2:
@@ -70,176 +84,136 @@ def GetBestPatches(px):
 #-----------------------------------------------------------------------------------------------#
 #|                              Quilting and related Functions                                 |#
 #-----------------------------------------------------------------------------------------------#
-def SumOfSquaredDifferences_mono( offset_row, offset_col, outPx, inpPx ):
-    block_0 = g_img_out[outPx[0] + offset_row, outPx[1] + offset_col]
-    block_1 = g_img_inp[inpPx[0] + offset_row, inpPx[1] + offset_col]
+def SumOfSquaredDifferences_mono( offset_row, offset_col, outLoc_row, outLoc_col, inpLoc ):
+    block_0 = g_img_out[outLoc_row + offset_row, outLoc_col + offset_col]
+    block_1 = g_img_inp[inpLoc[0] + offset_row, inpLoc[1] + offset_col]
     err_r = int(block_0[0]) - int(block_1[0])
     err_g = int(block_0[1]) - int(block_1[1])
     err_b = int(block_0[2]) - int(block_1[2])
     err_mono = (0.2125 * err_r**2) + (0.7154 * err_g**2) + (0.0721 * err_b**2);
     return err_mono
 
-def SumOfSquaredDifferences_rgbmean( offset_row, offset_col, outPx, inpPx ):
-    block_0 = g_img_out[outPx[0] + offset_row, outPx[1] + offset_col]
-    block_1 = g_img_inp[inpPx[0] + offset_row, inpPx[1] + offset_col]
-    err_r = int(block_0[0]) - int(block_1[0])
-    err_g = int(block_0[1]) - int(block_1[1])
-    err_b = int(block_0[2]) - int(block_1[2])
+def SumOfSquaredDifferences_rgbmean( offset_row, offset_col, outLoc_row,outLoc_col, inpLoc ):
+    block_0 = g_img_out[outLoc_row + offset_row, outLoc_col + offset_col]
+    block_1 = g_img_inp[inpLoc[0] + offset_row, inpLoc[1] + offset_col]
+    err_r = block_0[0] - block_1[0]
+    err_g = block_0[1] - block_1[1]
+    err_b = block_0[2] - block_1[2]
+    print err_r
     return (err_r**2 + err_g**2 + err_b**2)/3.0
 
 
-def SSD(offset_row, offset_col, outPx, inpPx):
-    return SumOfSquaredDifferences_mono(offset_row, offset_col, outPx, inpPx)
+def SSD(offset_row, offset_col, outLoc_row,outLoc_col, inpLoc):
+    return SumOfSquaredDifferences_rgbmean(offset_row, offset_col, outLoc_row, outLoc_col, inpLoc)
 
 # 2.1 Minimum Error Boundary Cut
-def MinimumErrorVerticalCut(outPx, inpPx):
-    # E(row,col) = e(row,col) + min[ E(row-1,col-1), E(row-1,col), E(row-1,col+1)]
+def MinimalCumulativeVerticalCut(outLoc_row,outLoc_col, inpLoc):
     Cost = np.zeros((g_PatchSize, g_OverlapWidth))
-    for col in range(g_OverlapWidth):
+    for col in range(g_OverlapWidth-1):
         for row in range(g_PatchSize):
-            if row == g_PatchSize - 1:
-                Cost[row,col] = SSD(row, col - g_OverlapWidth, outPx, inpPx)
+
+            Ev = SSD(row, col, outLoc_row,outLoc_col, inpLoc)
+
+            if row == g_PatchSize-1:
+                Cost[row,col] = Ev
             elif col == 0 :
-                Cost[row,col] = SSD(row, col - g_OverlapWidth, outPx, inpPx) + \
+                Cost[row,col] = Ev + \
                             min(
-                                SSD(row +1, col - g_OverlapWidth, outPx, inpPx)
-                               ,SSD(row +1, col - g_OverlapWidth +1, outPx, inpPx)
+                                SSD(row+1, col,   outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row+1, col+1, outLoc_row,outLoc_col, inpLoc)
                                )
             elif col == g_OverlapWidth - 1:
-                Cost[row,col] = SSD(row, col - g_OverlapWidth, outPx, inpPx) + \
+                Cost[row,col] = Ev + \
                             min(
-                                SSD(row +1, col - g_OverlapWidth, outPx, inpPx)
-                               ,SSD(row +1, col - g_OverlapWidth -1 , outPx, inpPx)
+                                SSD(row+1, col,     outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row+1, col -1 , outLoc_row,outLoc_col, inpLoc)
                                )
             else:
-                Cost[row,col] = SSD(row, col - g_OverlapWidth, outPx, inpPx) + \
+                Cost[row,col] = Ev + \
                             min(
-                                SSD(row +1, col - g_OverlapWidth -1, outPx, inpPx)
-                               ,SSD(row +1, col - g_OverlapWidth, outPx, inpPx)
-                               ,SSD(row +1, col - g_OverlapWidth +1, outPx, inpPx)
+                                SSD(row+1, col -1, outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row+1, col,    outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row+1, col +1, outLoc_row,outLoc_col, inpLoc)
                                )
     return Cost
 
-def MinimumErrorHorizntlCut(outPx, inpPx):
+def MinimalCumulativeHorizntlCut(outLoc_row,outLoc_col, inpLoc):
+    # Eh(row,col) = min( Eh(row-1,col+1), Eh(row,col+1), Eh(row+1,col+1))
     Cost = np.zeros((g_OverlapWidth, g_PatchSize))
     for row in range( g_OverlapWidth ):
-        for col in range( g_PatchSize ):
-            if col == g_PatchSize - 1:
-                Cost[row,col] = SSD(row - g_OverlapWidth, col, outPx, inpPx)
-            elif row == 0:
-                Cost[row,col] = SSD(row - g_OverlapWidth, col, outPx, inpPx) + \
+        for col in range(g_PatchSize-1):
+
+            Eh = SSD(row, col, outLoc_row,outLoc_col, inpLoc)
+
+            if col == g_PatchSize-1:
+                Cost[row,col] = Eh
+            if row == 0:
+                Cost[row,col] = Eh + \
                             min(
-                                SSD(row - g_OverlapWidth, col + 1, outPx, inpPx)
-                               ,SSD(row + 1 - g_OverlapWidth, col + 1, outPx, inpPx)
+                                SSD(row,    col+1, outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row +1, col+1, outLoc_row,outLoc_col, inpLoc)
                                )
             elif row == g_OverlapWidth - 1:
-                Cost[row,col] = SSD(row - g_OverlapWidth, col, outPx, inpPx) + \
+                Cost[row,col] = Eh + \
                             min(
-                                SSD(row - g_OverlapWidth, col + 1, outPx, inpPx)
-                               ,SSD(row - 1 - g_OverlapWidth, col + 1, outPx, inpPx)
+                                SSD(row,    col+1, outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row -1, col+1, outLoc_row,outLoc_col, inpLoc)
                                )
             else:
-                Cost[row,col] = SSD(row - g_OverlapWidth, col, outPx, inpPx) + \
+                Cost[row,col] = Eh + \
                             min(
-                                SSD(row - g_OverlapWidth, col + 1, outPx, inpPx)
-                               ,SSD(row - g_OverlapWidth + 1, col + 1, outPx, inpPx)
-                               ,SSD(row - g_OverlapWidth - 1, col + 1, outPx, inpPx)
+                                SSD(row,    col+1, outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row +1, col+1, outLoc_row,outLoc_col, inpLoc)
+                               ,SSD(row -1, col+1, outLoc_row,outLoc_col, inpLoc)
                                )
     return Cost
 
-#---------------------------------------------------------------#
-#|                  Finding Minimum Cost Path                  |#
-#---------------------------------------------------------------#
-
+# Finding Minimum Cost Trace
 def FindMinCostPathVertical(Cost):
-    Boundary = np.zeros((g_PatchSize),np.int)
-    ParentMatrix = np.zeros((g_PatchSize, g_OverlapWidth),np.int)
-    for i in range(1, g_PatchSize):
-        for j in range(g_OverlapWidth):
-            if j == 0:
-                ParentMatrix[i,j] = j if Cost[i-1,j] < Cost[i-1,j+1] else j+1
-            elif j == g_OverlapWidth - 1:
-                ParentMatrix[i,j] = j if Cost[i-1,j] < Cost[i-1,j-1] else j-1
-            else:
-                curr_min = j if Cost[i-1,j] < Cost[i-1,j-1] else j-1
-                ParentMatrix[i,j] = curr_min if Cost[i-1,curr_min] < Cost[i-1,j+1] else j+1
-            Cost[i,j] += Cost[i-1, ParentMatrix[i,j]]
-    minIndex = 0
-    for j in range(1,g_OverlapWidth):
-        minIndex = minIndex if Cost[g_PatchSize - 1, minIndex] < Cost[g_PatchSize - 1, j] else j
-    Boundary[g_PatchSize-1] = minIndex
-
-    for i in range(g_PatchSize - 1,0,-1):
-        Boundary[i - 1] = ParentMatrix[i,Boundary[i]]
-
-    return Boundary
+    return np.argmin(Cost,axis=1)
 
 def FindMinCostPathHorizntl(Cost):
-    Boundary = np.zeros(( g_PatchSize),np.int)
-    ParentMatrix = np.zeros((g_OverlapWidth, g_PatchSize),np.int)
-    for j in range(1, g_PatchSize):
-        for i in range(g_OverlapWidth):
-            if i == 0:
-                ParentMatrix[i,j] = i if Cost[i,j-1] < Cost[i+1,j-1] else i + 1
-            elif i == g_OverlapWidth - 1:
-                ParentMatrix[i,j] = i if Cost[i,j-1] < Cost[i-1,j-1] else i - 1
-            else:
-                curr_min = i if Cost[i,j-1] < Cost[i-1,j-1] else i - 1
-                ParentMatrix[i,j] = curr_min if Cost[curr_min,j-1] < Cost[i-1,j-1] else i + 1
-            Cost[i,j] += Cost[ParentMatrix[i,j], j-1]
-    minIndex = 0
-    for i in range(1,g_OverlapWidth):
-        minIndex = minIndex if Cost[minIndex, g_PatchSize - 1] < Cost[i, g_PatchSize - 1] else i
-    Boundary[g_PatchSize-1] = minIndex
-    for j in range(g_PatchSize - 1,0,-1):
-        Boundary[j - 1] = ParentMatrix[Boundary[j],j]
-    return Boundary
+    return np.argmin(Cost,axis=0)
 
 #---------------------------------------------------------------#
 #|                      Quilting                               |#
 #---------------------------------------------------------------#
 
-def QuiltVertical(Boundary, outPx, inpPx):
-    for i in range(g_PatchSize):
-        for j in range(Boundary[i], 0, -1):
-            g_img_out[outPx[0] + i, outPx[1] - j] = g_img_inp[ inpPx[0] + i, inpPx[1] - j ]
-def QuiltHorizntl(Boundary, outPx, inpPx):
-    for j in range(g_PatchSize):
-        for i in range(Boundary[j], 0, -1):
-            g_img_out[outPx[0] - i, outPx[1] + j] = g_img_inp[inpPx[0] - i, inpPx[1] + j]
+def QuiltVertical(Boundary, outLoc_row, outLoc_col, inpLoc):
+    for row in range(g_PatchSize):
+        for col in range(Boundary[row], g_OverlapWidth):
+            g_img_out[outLoc_row + row, outLoc_col + col] = g_img_inp[inpLoc[0] + row, inpLoc[1] + col ]
 
-def QuiltPatches( outPx, inpPx ):
-    #check for top layer
-    if outPx[0] == 0:
-        Cost = MinimumErrorVerticalCut(outPx, inpPx)
-        # Getting boundary to stitch
+def QuiltHorizntl(Boundary, outLoc_row, outLoc_col, inpLoc):
+    for col in range(g_PatchSize):
+        for row in range(Boundary[col], g_OverlapWidth):
+            g_img_out[outLoc_row + row, outLoc_col + col] = g_img_inp[inpLoc[0] + row, inpLoc[1] + col]
+
+def QuiltPatches(outLoc_row, outLoc_col, inpLoc ):
+    if outLoc_row == 0:
+        Cost = MinimalCumulativeVerticalCut(outLoc_row, outLoc_col-g_OverlapWidth, inpLoc)
         Boundary = FindMinCostPathVertical(Cost)
-        #Quilting Patches
-        QuiltVertical(Boundary, outPx, inpPx)
-    #check for leftmost layer
-    elif outPx[1] == 0:
-        Cost = MinimumErrorHorizntlCut(outPx, inpPx)
-        #Boundary to stitch
+        QuiltVertical(Boundary, outLoc_row,outLoc_col-g_OverlapWidth, inpLoc)
+    elif outLoc_col == 0:
+        Cost = MinimalCumulativeHorizntlCut(outLoc_row-g_OverlapWidth,outLoc_col, inpLoc)
         Boundary = FindMinCostPathHorizntl(Cost)
-        #Quilting Patches
-        QuiltHorizntl(Boundary, outPx, inpPx)
-    #for pixel placed inside
+        QuiltHorizntl(Boundary, outLoc_row-g_OverlapWidth,outLoc_col, inpLoc)
     else:
-        CostVertical = MinimumErrorVerticalCut(outPx, inpPx)
-        CostHorizntl = MinimumErrorHorizntlCut(outPx, inpPx)
+        CostVertical = MinimalCumulativeVerticalCut(outLoc_row-g_OverlapWidth, outLoc_col-g_OverlapWidth, inpLoc)
+        CostHorizntl = MinimalCumulativeHorizntlCut(outLoc_row-g_OverlapWidth, outLoc_col-g_OverlapWidth, inpLoc)
         BoundaryVertical = FindMinCostPathVertical(CostVertical)
         BoundaryHorizntl = FindMinCostPathHorizntl(CostHorizntl)
-        QuiltVertical(BoundaryVertical, outPx, inpPx)
-        QuiltHorizntl(BoundaryHorizntl, outPx, inpPx)
+        QuiltVertical(BoundaryVertical, outLoc_row-g_OverlapWidth, outLoc_col-g_OverlapWidth, inpLoc)
+        QuiltHorizntl(BoundaryHorizntl, outLoc_row-g_OverlapWidth, outLoc_col-g_OverlapWidth, inpLoc)
 
 #--------------------------------------------------------------------------------------------------------#
 #                                   Growing Image Patch-by-patch                                        |#
 #--------------------------------------------------------------------------------------------------------#
 
-def FillImage( outPx, inpPx ):
+def FillImage( outLoc, inpLoc ):
     for i in range(g_PatchSize):
         for j in range(g_PatchSize):
-            g_img_out[ outPx[0] + i, outPx[1] + j ] = g_img_inp[ inpPx[0] + i, inpPx[1] + j ]
+            g_img_out[ outLoc[0] + i, outLoc[1] + j ] = g_img_inp[ inpLoc[0] + i, inpLoc[1] + j ]
 
 
 
@@ -269,33 +243,33 @@ print "output dim: %sx%s"%(img_width,img_height)
 
 g_img_out = np.zeros((img_height,img_width,3), np.uint8)
 
+g_GrowPatchLocation_row = 0
+g_GrowPatchLocation_col = g_PatchSize
 PickInitialPatch()
-
-#initializating next
-g_GrowPatchLocation = (0,g_PatchSize)
 
 patchesCompleted = 1
 
 TotalPatches = (img_height*img_width)/(g_PatchSize**2)
-while g_GrowPatchLocation[0] + g_PatchSize <= img_height:
+while g_GrowPatchLocation_row + g_PatchSize <= img_height:
     ThresholdConstant = g_InitialThreshold
     #set progress to zer0
     progress = 0
     while progress == 0:
         g_ErrThreshold = ThresholdConstant * g_PatchSize * g_OverlapWidth
         #Get Best matches for current pixel
-        List = GetBestPatches(g_GrowPatchLocation)
+        List = GetBestPatches(g_GrowPatchLocation_row, g_GrowPatchLocation_col)
         if len(List) > 0:
             progress = 1
             #Make A random selection from best fit pxls
             sampleMatch = List[ randint(0, len(List) - 1) ]
-            FillImage( g_GrowPatchLocation, sampleMatch )
+            #FillImage( g_GrowPatchLocation, sampleMatch )
             #Quilt this with in curr location
-            QuiltPatches( g_GrowPatchLocation, sampleMatch )
+            QuiltPatches(g_GrowPatchLocation_row, g_GrowPatchLocation_col, sampleMatch )
             #upadate cur pixel location
-            g_GrowPatchLocation = (g_GrowPatchLocation[0], g_GrowPatchLocation[1] + g_PatchSize)
-            if g_GrowPatchLocation[1] + g_PatchSize > img_width:
-                g_GrowPatchLocation = (g_GrowPatchLocation[0] + g_PatchSize, 0)
+            g_GrowPatchLocation_col += g_PatchSize
+            if g_GrowPatchLocation_col + g_PatchSize > img_width:
+                g_GrowPatchLocation_row += g_PatchSize
+                g_GrowPatchLocation_col = 0
         #if not progressed, increse threshold
         else:
             ThresholdConstant *= 1.1

@@ -1,5 +1,4 @@
 #! /usr/bin/python
 
-
-1/2 * 1/2  = 1/4
-0.5 * 0.5 = 0.25
+for x in range(7, 0, -1):
+    print x
