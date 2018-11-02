@@ -13,7 +13,7 @@ def GetLeftStrip(block,ovrlp_size):
     if block is None:
         return None
     block_row = block.shape[0]
-    ovrlp = np.zeros((block_row, ovrlp_size))
+    #ovrlp = np.zeros((block_row, ovrlp_size))
     ovrlp = block[:,:ovrlp_size,:]
     return ovrlp
 
@@ -22,7 +22,7 @@ def GetRightStrip(block,ovrlp_size):
     if block is None:
         return None
     block_row = block.shape[0]
-    ovrlp = np.zeros((block_row, ovrlp_size))
+    #ovrlp = np.zeros((block_row, ovrlp_size))
     ovrlp = block[:,-ovrlp_size:]
     return ovrlp
 
@@ -30,7 +30,7 @@ def GetBottomStrip(block,ovrlp_size):
     if block is None:
         return None
     block_row = block.shape[0]
-    ovrlp = np.zeros((block_row, ovrlp_size))
+    #ovrlp = np.zeros((block_row, ovrlp_size))
     ovrlp = block[-ovrlp_size:]
     return ovrlp
 
@@ -38,9 +38,41 @@ def GetTopStrip(block,ovrlp_size):
     if block is None:
         return None
     block_row = block.shape[0]
-    ovrlp = np.zeros((block_row, ovrlp_size))
+    #ovrlp = np.zeros((block_row, ovrlp_size))
     ovrlp = block[:ovrlp_size]
     return ovrlp
+
+
+def GetBlock(texture, off_row, off_col, block_row_height, block_col_width):
+    if ( off_row < 0
+      or off_col < 0
+       ):
+        return None
+
+    #out = np.zeros((block_row_height,block_col_width,3), np.uint8)
+    out = texture[off_row:off_row+block_row_height,
+                  off_col:off_col+block_col_width
+                 ]
+    return out
+
+
+def PutBlock(out, off_row, off_col, block):
+    if block is None:
+        print "PutBlock: empty block"
+        raise
+
+    if ( off_row < 0
+      or off_col < 0
+       ):
+        print "PutBlock: invalid coords"
+        raise
+
+    block_row = block.shape[0]
+    block_col = block.shape[1]
+
+    out[off_row:off_row+block_row,
+        off_col:off_col+block_col
+       ] = block
 
 
 def BlockSelect_1(block_left, block_above, texture, synth, block_side_length, ovrlp_size, err_threshold):
@@ -110,7 +142,7 @@ def BlockSelect_1(block_left, block_above, texture, synth, block_side_length, ov
                                                 ,ovrlp_size
                                                 )
 
-                print "error_vertical:\n%s" % VertCost
+                #print "error_vertical:\n%s" % VertCost
                 if (np.less(VertCost,err_v/2).all()
                 and np.less(HorzCost,err_h/2).all()
                    ):
@@ -129,6 +161,8 @@ def BlockSelect(block_left, block_above, texture, block_side_length, ovrlp_size,
     err_v    = np.full((block_side_length,ovrlp_size), err_threshold)
     err_h    = np.full((ovrlp_size,block_side_length), err_threshold)
 
+    print "select best block w/o err-threshold %s" % err_threshold
+
     # Initial block
     if block_above is None and block_left is None:
         random_block_row = random.randint(0, texture_row - block_side_length)
@@ -139,7 +173,6 @@ def BlockSelect(block_left, block_above, texture, block_side_length, ovrlp_size,
                      ,block_side_length
                      ,block_side_length
                      )
-        #print rv.shape[1]
         return [rv]
 
     elif block_above is None:
@@ -151,8 +184,8 @@ def BlockSelect(block_left, block_above, texture, block_side_length, ovrlp_size,
                 error_Vertical = BlockOvrlpError(ovrlp_left, ovrlp_next)
 
                 if np.less(error_Vertical,err_v/2).all():
-                    return [block_next]
-                if np.less(error_Vertical,err_v).all():
+                    PixelList.append(block_next)
+                elif np.less(error_Vertical,err_v).all():
                     PixelList.append(block_next)
 
     elif block_left is None:
@@ -190,37 +223,8 @@ def BlockSelect(block_left, block_above, texture, block_side_length, ovrlp_size,
                    ):
                     PixelList.append(block_next)
 
+    print "%s blocks" % len(PixelList)
     return PixelList
-
-def GetBlock(texture, off_row, off_col, block_row_height, block_col_width):
-    if ( off_row < 0
-      or off_col < 0
-       ):
-        return None
-
-    out = np.zeros((block_row_height,block_col_width,3), np.uint8)
-    out = texture[off_row:off_row+block_row_height,
-                  off_col:off_col+block_col_width
-                 ]
-    return out
-
-def PutBlock(out, off_row, off_col, block):
-    if block is None:
-        print "PutBlock: empty block"
-        raise
-
-    if ( off_row < 0
-      or off_col < 0
-       ):
-        print "PutBlock: invalid coords"
-        raise
-
-    block_row = block.shape[0]
-    block_col = block.shape[1]
-
-    out[off_row:off_row+block_row,
-        off_col:off_col+block_col
-       ] = block
 
 
 
@@ -252,7 +256,6 @@ def Normalize(Cost):
     cost_min = Cost.min()
     cost_max = Cost.max()
     if cost_min == 0 and cost_max == 0:
-        print "Weird: %s" % Cost
         return Cost
     return (Cost - cost_min)/(cost_max - cost_min)
 
@@ -430,8 +433,7 @@ def FindMinCostVertPath(Cost):
     argmin_col = np.argmin(Cost[-1:],axis=1)[0]
     min_error_cut[rows-1] = argmin_col
 
-    #print Cost
-    cv2.imshow("vert_cost", Cost)
+    #cv2.imshow("vert_cost", Cost)
     for row in range(rows-1,0,-1):
         col = min_error_cut[row] -1
         nb_elem = 3
@@ -442,7 +444,7 @@ def FindMinCostVertPath(Cost):
         look_into = Cost[row-1, col:col+nb_elem]
         argmin_col = np.argmin(look_into)
         min_error_cut[row-1] = col + argmin_col
-        print "VERT: %s --> %s --> %s" %(col, look_into, col+argmin_col)
+        #print "VERT: %s --> %s --> %s" %(col, look_into, col+argmin_col)
     return min_error_cut
 
 
@@ -450,12 +452,11 @@ def FindMinCostVertPath(Cost):
 def FindMinCostHorzPath(Cost):
     cols = Cost.shape[1]
     min_error_cut = np.zeros(cols,np.int)
-#
+
     argmin_row = np.argmin(Cost[:,cols-1])
     min_error_cut[cols-1] = argmin_row
 
-    #print Cost
-    cv2.imshow("horz_cost", Cost)
+    #cv2.imshow("horz_cost", Cost)
     for col in range(cols-1,0,-1):
         row = min_error_cut[col] -1
         nb_elem = 3
@@ -466,7 +467,7 @@ def FindMinCostHorzPath(Cost):
         look_into = Cost[row:row+nb_elem, col-1]
         argmin_row = np.argmin(look_into)
         min_error_cut[col-1] = row + argmin_row
-        print "HORZ: %s --> %s --> %s" %(row, look_into, row+argmin_row)
+        #print "HORZ: %s --> %s --> %s" %(row, look_into, row+argmin_row)
     return min_error_cut
 
 ############################################################################
@@ -570,7 +571,7 @@ def QuiltBlocks(ovrlp_left, ovrlp_above, block_next, boundaries, cur_synth_row, 
 #        cur_synth_row -= ovrlp_size
 #        block_row -= ovrlp_size
 
-    cv2.imshow("quilted_block", quilted_block)
+#    cv2.imshow("quilted_block", quilted_block)
     PutBlock(o_synth_array, cur_synth_row, cur_synth_col, quilted_block)
     return (block_row,block_col)
 
@@ -581,35 +582,39 @@ def align_up(in_val, in_base):
 
 ###################################################
 def main():
-    input_fname       = str(sys.argv[1])
-    block_side_length = int(sys.argv[2])
-    ovrlp_size        = int(sys.argv[3])
-    err_threshold     = float(sys.argv[4])
-
-    print "ovrlp_size:%s" % ovrlp_size
+    block_side_length = int(sys.argv[1])
+    ovrlp_size        = int(sys.argv[2])
+    err_threshold     = float(sys.argv[3])
+    input_fname       = str(sys.argv[4])
+    output_fname      = str(sys.argv[5])
 
     i_texture = cv2.imread(input_fname)
 
     i_texture_height_rows = i_texture.shape[0]
     i_texture_width_cols = i_texture.shape[1]
 
-    o_synth_row = align_up(i_texture_height_rows,block_side_length)
-    o_synth_col = align_up(i_texture_width_cols,block_side_length)
+    if (block_side_length > i_texture_height_rows
+     or block_side_length > i_texture_width_cols
+       ):
+        print "block size is bigger than input texture"
+        sys.exit(1)
 
-    required_blocks =  (o_synth_row*o_synth_col) / (block_side_length**2)
+    o_synth_row = align_up(i_texture_height_rows*2,block_side_length-ovrlp_size) + block_side_length
+    o_synth_col = align_up(i_texture_width_cols*2,block_side_length-ovrlp_size) + block_side_length
 
     o_synth_array = np.zeros((o_synth_row,o_synth_col,3), np.uint8)
 
+    print "ovrlp_size:%s" % ovrlp_size
     print "input dim : %sx%s"%(i_texture_width_cols,i_texture_height_rows)
-    print "output dim: %sx%s (%s blocks)"%(o_synth_col,o_synth_row, required_blocks)
-
+    print "output dim: %sx%s"%(o_synth_col,o_synth_row)
+    #sys.exit(0)
     cur_synth_row = 0
     while cur_synth_row < o_synth_row:
         cur_synth_col = 0
         while cur_synth_col < o_synth_col:
             print "GetBlock: row:%s col:%s..+%s +%s" % (cur_synth_row, cur_synth_col-block_side_length, block_side_length, block_side_length)
-            img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
-            cv2.imshow('Synth Array Before',img_zoomed)
+#            img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
+#            cv2.imshow('Synth Array Before',img_zoomed)
 
             block_left = GetBlock(
                                     o_synth_array
@@ -646,8 +651,8 @@ def main():
                                 ,cur_err_threshold
                                 )
                 if not best_blocks:
-                    print "ERROR:no best blocks w/ err-threshold:%s" % cur_err_threshold
-                    cur_err_threshold += 1
+                    print "no best blocks w/ err-threshold:%s" % cur_err_threshold
+                    cur_err_threshold += 5
                     continue
                 break
 
@@ -656,17 +661,17 @@ def main():
             block_next_vert_ovrlp = GetLeftStrip(block_next ,ovrlp_size)
             block_next_horz_ovrlp = GetTopStrip(block_next ,ovrlp_size)
 
-            if block_prev_vert_ovrlp is not None:
-                cv2.imshow('block_prev_vert_ovrlp',block_prev_vert_ovrlp)
-            if block_prev_horz_ovrlp is not None:
-                cv2.imshow('block_prev_horz_ovrlp',block_prev_horz_ovrlp)
-            if block_above is not None:
-                cv2.imshow('block_above',block_above)
-            if block_left is not None:
-                cv2.imshow('block_left',block_left)
-            cv2.imshow('block_next',block_next)
-            cv2.imshow('block_next_vert_ovrlp',block_next_vert_ovrlp)
-            cv2.imshow('block_next_horz_ovrlp',block_next_horz_ovrlp)
+#            if block_prev_vert_ovrlp is not None:
+#                cv2.imshow('block_prev_vert_ovrlp',block_prev_vert_ovrlp)
+#            if block_prev_horz_ovrlp is not None:
+#                cv2.imshow('block_prev_horz_ovrlp',block_prev_horz_ovrlp)
+#            if block_above is not None:
+#                cv2.imshow('block_above',block_above)
+#            if block_left is not None:
+#                cv2.imshow('block_left',block_left)
+#            cv2.imshow('block_next',block_next)
+#            cv2.imshow('block_next_vert_ovrlp',block_next_vert_ovrlp)
+#            cv2.imshow('block_next_horz_ovrlp',block_next_horz_ovrlp)
             boundaries = MinimumErrorCuts(
                                     block_prev_vert_ovrlp
                                     ,block_prev_horz_ovrlp
@@ -685,12 +690,15 @@ def main():
                                 ,ovrlp_size
                                 )
             cur_synth_col += ovrlp_qlt[1]
-            img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
-            cv2.imshow('Synth Array After',img_zoomed)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+#            img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
+#            cv2.imshow('Synth Array After',img_zoomed)
+#            cv2.waitKey(0)
+#            cv2.destroyAllWindows()
         cur_synth_row += ovrlp_qlt[0]
         print
-    cv2.imwrite('out.png',o_synth_array)
+    cv2.imwrite(output_fname,o_synth_array)
+    cv2.imshow('Synth Array After',o_synth_array)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
 main()
