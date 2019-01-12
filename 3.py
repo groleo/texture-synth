@@ -3,6 +3,7 @@
 # https://people.eecs.berkeley.edu/~efros/research/quilting/quilting.pdf
 
 import time
+import math
 import random
 import cv2
 import sys
@@ -10,45 +11,57 @@ import numpy as np
 from random import randint
 from scipy.spatial import distance
 
-def PickInitialBlock(off_row, off_col, texture, block_size):
+def PickInitialBlock(off_row, off_col, texture, block_side_length):
     texture_row = texture.shape[0]
     texture_col = texture.shape[1]
 
-    randomPatch_x = randint(0, texture_row - block_size)
-    randomPatch_y = randint(0, texture_col - block_size)
-    o_synth = np.zeros((block_size,block_size,3), np.uint8)
-    for x in range(block_size):
-        for y in range(block_size):
-            o_synth[x, y] = texture[randomPatch_x + x, randomPatch_y + y]
-    return o_synth
+    randomPatch_x = randint(0, texture_row - block_side_length)
+    randomPatch_y = randint(0, texture_col - block_side_length)
+    o_synth_array = np.zeros((block_side_length,block_side_length,3), np.uint8)
+    for x in range(block_side_length):
+        for y in range(block_side_length):
+            o_synth_array[x, y] = texture[randomPatch_x + x, randomPatch_y + y]
+    return o_synth_array
 
-def BlockSelect(block_left, block_above, texture, synth, block_size, overlap_size, err_threshold):
+def BlockSelect(block_left, block_above, texture, synth, block_side_length, overlap_size, err_threshold):
     PixelList = []
     texture_row = texture.shape[0]
     texture_col = texture.shape[1]
-    err_v    = np.full((block_size,overlap_size), err_threshold)
-    err_h    = np.full((overlap_size,block_size), err_threshold)
+    err_v    = np.full((block_side_length,overlap_size), err_threshold)
+    err_h    = np.full((overlap_size,block_side_length), err_threshold)
 
+    # Initial block
     if block_above is None and block_left is None:
-        random_block_row = randint(0, texture_row - block_size)
-        random_block_col = randint(0, texture_col - block_size)
-        return [(random_block_row,random_block_col)]
+        random_block_row = randint(0, texture_row - block_side_length)
+        random_block_col = randint(0, texture_col - block_side_length)
+        rv = GetBlock(texture
+                     ,random_block_row
+                     ,random_block_col
+                     ,block_side_length
+                     ,block_side_length
+                     )
+        print rv.shape[1]
+        return [rv]
 
     elif block_above is None:
-        for row in range(0,texture_row-block_size):
-            for col in range(0, texture_col-block_size):
-                block_next = GetBlock(row, col, texture, block_size)
+        for row in range(0,texture_row-block_side_length):
+            for col in range(0, texture_col-block_side_length):
+                block_next = GetBlock(texture, row, col, block_side_length, block_side_length)
 
-                error_Vertical = VerticalOverlapError(block_left, block_next, overlap_size)
+                ovrlp_left = GetVertOverlapPrev(block_left,overlap_size)
+                ovrlp_next = GetVertOverlapNext(block_next,overlap_size)
 
-                if np.less(error_Vertical,err_v/2).all():
-                    return [(row,col)]
+                error_Vertical = VerticalOverlapError(ovrlp_left, ovrlp_next)
+
                 if np.less(error_Vertical,err_v).all():
-                    PixelList.append((row,col))
+                    PixelList.append(block_next)
+                elif np.less(error_Vertical,err_v/2).all():
+                    return [block_next]
+
     elif block_left is None:
-        for row in range(0, texture_row-block_size):
-            for col in range(0,texture_col-block_size):
-                block_next = GetBlock(row, col, texture, block_size)
+        for row in range(0, texture_row-block_side_length):
+            for col in range(0,texture_col-block_side_length):
+                block_next = GetBlock(texture, row, col, block_side_length, block_side_length)
 
                 error_Horizntl = HorizntlOverlapError(block_above, block_next, overlap_size)
 
@@ -57,9 +70,9 @@ def BlockSelect(block_left, block_above, texture, synth, block_size, overlap_siz
                 if np.less(error_Horizntl,err_h).all():
                     PixelList.append((row,col))
     else:
-        for row in range(0, texture_row-block_size):
-            for col in range(0, texture_col-block_size):
-                block_next = GetBlock(row, col, texture, block_size)
+        for row in range(0, texture_row-block_side_length):
+            for col in range(0, texture_col-block_side_length):
+                block_next = GetBlock(texture, row, col, block_side_length, block_side_length)
 
                 error_Vertical = VerticalOverlapError(block_left, block_next, overlap_size)
                 error_Horizntl = HorizntlOverlapError(block_above, block_next, overlap_size)
@@ -83,13 +96,15 @@ def diff(block_left, block_next, overlap_size):
 
     return err
 
-def VerticalOverlapError(block_left, block_next, overlap_size):
+def VerticalOverlapError(block_left, block_next):
 
-    diff_r =  diff(block_left[:, :, 0].T, block_next[:, :, 0].T, overlap_size).T
-    diff_g =  diff(block_left[:, :, 1].T, block_next[:, :, 1].T, overlap_size).T
-    diff_b =  diff(block_left[:, :, 2].T, block_next[:, :, 2].T, overlap_size).T
+    diff_r =  block_left[:, :, 0] - block_next[:, :, 0]
+    diff_g =  block_left[:, :, 1] - block_next[:, :, 1]
+    diff_b =  block_left[:, :, 2] - block_next[:, :, 2]
 
-    dist = ((diff_r**2 + diff_g**2 + diff_b**2)**0.5).astype(np.uint8)
+    dist = ((diff_r**2 + diff_g**2 + diff_b**2)**0.5).astype(np.int)
+    #dist = ((0.2125 * diff_r**2) + (0.7154 * diff_g**2) + (0.0721 * diff_b**2))
+    #dist = ((diff_r**2 + diff_g**2 + diff_b**2)/3.0).astype(np.int)
     return dist
 
 def HorizntlOverlapError(block_above, block_next, overlap_size):
@@ -101,40 +116,44 @@ def HorizntlOverlapError(block_above, block_next, overlap_size):
     return dist
 
 
-def PickBlock(off_row, off_col, texture, block_size):
+def PickBlock(off_row, off_col, texture, block_side_length):
     if off_row==0 and off_col==0:
-        return PickInitialBlock(off_row, off_col, texture, block_size)
+        return PickInitialBlock(off_row, off_col, texture, block_side_length)
 
     texture_row = texture.shape[0]
     texture_col = texture.shape[1]
 
-    randomPatch_x = randint(0, texture_row - block_size)
-    randomPatch_y = randint(0, texture_col - block_size)
-    o_synth = np.zeros((block_size,block_size,3), np.uint8)
-    for x in range(block_size):
-        for y in range(block_size):
-            o_synth[x, y] = texture[randomPatch_x + x, randomPatch_y + y]
+    randomPatch_x = randint(0, texture_row - block_side_length)
+    randomPatch_y = randint(0, texture_col - block_side_length)
+    o_synth_array = np.zeros((block_side_length,block_side_length,3), np.uint8)
+    for x in range(block_side_length):
+        for y in range(block_side_length):
+            o_synth_array[x, y] = texture[randomPatch_x + x, randomPatch_y + y]
 
-    return o_synth
+    return o_synth_array
 
-def GetBlock(off_row, off_col, texture, block_size):
-    out = np.zeros((block_size,block_size,3), np.uint8)
-    out = texture[off_row:off_row+block_size,off_col:off_col+block_size]
+def GetBlock(texture, off_row, off_col, block_row_height, block_col_width):
+    out = np.zeros((block_row_height,block_col_width,3), np.uint8)
+    out = texture[off_row:off_row+block_row_height,
+                  off_col:off_col+block_col_width
+                 ]
     return out
 
-def GetBlockAbove(off_row, off_col, texture, block_size):
-    off_row -= block_size
+def GetAboveOverlap(texture, off_row, off_col, block_side_length, overlap_size):
+    off_row -= overlap_size
     if off_row <0:
         return None
-    return GetBlock(off_row, off_col, texture, block_size)
+    return GetBlock(texture, off_row, off_col, overlap_size, block_side_length)
 
-def GetBlockLeft(off_row, off_col, texture, block_size):
-    off_col -= block_size
-    if off_col <0:
+def GetLeftOverlap(texture, off_row, off_col, block_side_length, overlap_size):
+    off_col -= overlap_size
+    print "col:%s" % off_col
+    if off_col < 0:
+        print "no blocks found at the Left"
         return None
-    return GetBlock(off_row, off_col, texture, block_size)
+    return GetBlock(texture, off_row, off_col, block_side_length, overlap_size)
 
-def PutBlock(off_row, off_col, block, out):
+def PutBlock(out, off_row, off_col, block):
     if block is None:
         print "empty block"
         raise
@@ -142,51 +161,131 @@ def PutBlock(off_row, off_col, block, out):
     block_row = block.shape[0]
     block_col = block.shape[1]
 
-    out[off_row:off_row+block_row,off_col:off_col+block_col] = block
+    out[off_row:off_row+block_row,
+        off_col:off_col+block_col
+       ] = block
 
-    cv2.imshow('Synthethised',out)
-    cv2.waitKey(300)
-    cv2.destroyAllWindows()
+
 ##########################################################################
+# Sum of Squared Differences
 def SSD(row, col, block_left, block_next):
-    block_size = block_left.shape[0]
     diff_r =  block_left[row, col, 0].astype(np.int) - block_next[row, col, 0].astype(np.int)
     diff_g =  block_left[row, col, 1].astype(np.int) - block_next[row, col, 1].astype(np.int)
     diff_b =  block_left[row, col, 2].astype(np.int) - block_next[row, col, 2].astype(np.int)
 
-    dist = ((diff_r**2 + diff_g**2 + diff_b**2)/3.0).astype(np.int)
+    #dist = ((diff_r**2 + diff_g**2 + diff_b**2)/3.0).astype(np.uint)
+    #dist = ((0.2125 * diff_r**2) + (0.7154 * diff_g**2) + (0.0721 * diff_b**2))
+    dist = ((diff_r**2 + diff_g**2 + diff_b**2)**0.5).astype(np.int)
     return dist
 
+def GetVertOverlapPrev(block,overlap_size):
+    if block is None:
+        return None
+    block_row = block.shape[0]
+    ovrlp = np.zeros((block_row, overlap_size))
+    ovrlp = block[:,-overlap_size:]
+    return ovrlp
 
+def GetVertOverlapNext(block,overlap_size):
+    if block is None:
+        return None
+    block_row = block.shape[0]
+    ovrlp = np.zeros((block_row, overlap_size))
+    ovrlp = block[:,:overlap_size,:]
+    return ovrlp
+
+def display(name, block):
+    cv2.imshow(name,block)
+def displayw(name, block):
+    cv2.imshow(name,block)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 # 2.1 Minimum Error Boundary Cut
-def MinVerticalCumulativeError(block_left, block_next, overlap_size):
-    block_row = block_next.shape[0]
-    Cost = np.zeros((block_row, overlap_size))
 
-    for col in range(0,overlap_size-1):
-        for row in range(0,block_row):
-            Ev = SSD(row, col, block_left, block_next)
+#######################
+# E
+# . . . . @ . . .
+# . . . @ . . . .
+# . . . . @ . . .
+# . . . @ . . . .
+# . . . @ . . . .
+# . . @ . . . . .
+# . . . @ . . . .
+# . . . . @ . . .
+# . . . . @ . . .
+# . . . . . @ . .
+# . . . . . @ . .
+# . . . . @ . . .
+# . . . . @ . . .
+#######################
 
-            if row == block_row-1:
+# E[2,2] = e[2,2] + Min {E[1,1], E[1,2],E[1,3]}
+
+# e[i,j] = (Block1[i,j] - Block2[i,j])**2
+#
+# E[i,j] = e[i,j] when i==1
+# E[i,j] = e[i,j] + Min {E[i-1,j-1], E[i-1,j],E[i-1,j+1]} when i>1
+def MinVerticalCumulativeError(ovrlp_left, ovrlp_next, overlap_size):
+    ovrlp_row = ovrlp_next.shape[0]
+    Cost = np.zeros((ovrlp_row, overlap_size))
+
+    for row in range(ovrlp_row):
+        for col in range(overlap_size):
+            Ev = SSD(row, col, ovrlp_left, ovrlp_next)
+
+            if row == 0:
                 Cost[row,col] = Ev
-            elif col == 0 :
+                continue
+            if col == 0 :
                 Cost[row,col] = Ev + \
                             min(
-                                SSD(row+1, col,    block_left, block_next)
-                               ,SSD(row+1, col +1, block_left, block_next)
+                                SSD(row-1, col,    ovrlp_left, ovrlp_next)
+                               ,SSD(row-1, col +1, ovrlp_left, ovrlp_next)
                                )
             elif col == overlap_size - 1:
                 Cost[row,col] = Ev + \
                             min(
-                                SSD(row+1, col,    block_left, block_next)
-                               ,SSD(row+1, col -1, block_left, block_next)
+                                SSD(row-1, col -1, ovrlp_left, ovrlp_next)
+                               ,SSD(row-1, col,    ovrlp_left, ovrlp_next)
+                               )
+            else:
+                Cost[row,col] = Ev + min(
+                                SSD(row-1, col -1, ovrlp_left, ovrlp_next)
+                               ,SSD(row-1, col,    ovrlp_left, ovrlp_next)
+                               ,SSD(row-1, col +1, ovrlp_left, ovrlp_next)
+                               )
+    cost_min = Cost.min()
+    cost_max = Cost.max()
+    return (Cost - cost_min)/(cost_max - cost_min)
+
+def MinVerticalCumulativeError_v1(ovrlp_left, ovrlp_next, overlap_size):
+    ovrlp_row = ovrlp_next.shape[0]
+    Cost = np.zeros((ovrlp_row, overlap_size))
+
+    for col in range(overlap_size):
+        for row in range(ovrlp_row):
+            Ev = SSD(row, col, ovrlp_left, ovrlp_next)
+
+            if row == ovrlp_row-1:
+                Cost[row,col] = Ev
+            elif col == 0 :
+                Cost[row,col] = Ev + \
+                            min(
+                                SSD(row+1, col,    ovrlp_left, ovrlp_next)
+                               ,SSD(row+1, col +1, ovrlp_left, ovrlp_next)
+                               )
+            elif col == overlap_size - 1:
+                Cost[row,col] = Ev + \
+                            min(
+                                SSD(row+1, col -1, ovrlp_left, ovrlp_next)
+                               ,SSD(row+1, col,    ovrlp_left, ovrlp_next)
                                )
             else:
                 Cost[row,col] = Ev + \
                             min(
-                                SSD(row+1, col -1, block_left, block_next)
-                               ,SSD(row+1, col,    block_left, block_next)
-                               ,SSD(row+1, col +1, block_left, block_next)
+                                SSD(row+1, col -1, ovrlp_left, ovrlp_next)
+                               ,SSD(row+1, col,    ovrlp_left, ovrlp_next)
+                               ,SSD(row+1, col +1, ovrlp_left, ovrlp_next)
                                )
     return Cost
 
@@ -220,10 +319,32 @@ def MinHorizntlCumulativeError(block_above, block_next, overlap_size):
                                ,SSD(row +1, col+1, block_above, block_next)
                                ,SSD(row -1, col+1, block_above, block_next)
                                )
-    return Cost
+    cost_min = Cost.min()
+    cost_max = Cost.max()
+    return (Cost - cost_min)/(cost_max - cost_min)
 
 def FindMinCostPathVertical(Cost):
-    return np.argmin(Cost,axis=1)
+    rows = Cost.shape[0]
+    min_error_cut = np.zeros(rows,np.uint8)
+    argmin_col = np.argmin(Cost[-1:],axis=1)[0]
+    min_error_cut[rows-1] = argmin_col
+
+    print Cost
+    cv2.imshow("cost", Cost)
+    for row in range(rows-1,0,-1):
+        col = min_error_cut[row] -1
+        nb_elem = 3
+        if col < 0:
+            col = 0
+            nb_elem = 2
+
+        look_into = Cost[row-1, col:col+nb_elem]
+        argmin_col = np.argmin(look_into)
+        min_error_cut[row-1] = col+argmin_col
+        print "%s --> %s --> %s" %(col, look_into, col+argmin_col)
+    return min_error_cut
+
+
 
 def FindMinCostPathHorizntl(Cost):
     return np.argmin(Cost,axis=0)
@@ -231,7 +352,9 @@ def FindMinCostPathHorizntl(Cost):
 def MinimumErrorCut(block_left, block_above, block_next, overlap_size):
     if block_above is None and block_left is None:
         return (None,None)
+
     elif block_above is None:
+        print "case 3"
         Cost = MinVerticalCumulativeError(
                                           block_left
                                          ,block_next
@@ -239,6 +362,7 @@ def MinimumErrorCut(block_left, block_above, block_next, overlap_size):
                                          )
         Boundary = FindMinCostPathVertical(Cost)
         return (Boundary,None)
+
     elif block_left is None:
         Cost = MinHorizntlCumulativeError(
                                           block_above
@@ -247,6 +371,7 @@ def MinimumErrorCut(block_left, block_above, block_next, overlap_size):
                                          )
         Boundary = FindMinCostPathHorizntl(Cost)
         return (None,Boundary)
+
     else:
         CostVertical = MinVerticalCumulativeError(
                                           block_left
@@ -261,73 +386,116 @@ def MinimumErrorCut(block_left, block_above, block_next, overlap_size):
         BoundaryVertical = FindMinCostPathVertical(CostVertical)
         BoundaryHorizntl = FindMinCostPathHorizntl(CostHorizntl)
         return (BoundaryVertical,BoundaryHorizntl)
+
 ###################################################
-def QuiltPatches(block_left, block_next, boundaries):
-    if block_left is None:
-        print "caca"
-        return block_next
-    else:
-        return block_next
+#def QuiltVertical(Boundary, outLoc_row, outLoc_col, inpLoc):
+def QuiltBlockLeft(overlap_left, block_next, boundaries, o_cur_row, o_cur_col, o_synth_array, overlap_size):
+    if overlap_left is None:
+        print "QuiltBlockLeft:leftmost block"
+        PutBlock(o_synth_array, o_cur_row, o_cur_col, block_next)
+        return block_next.shape
+
+    block_row = block_next.shape[0]
+    block_col = block_next.shape[1]
+    boundary  = boundaries[0]
+    o_cur_col -= overlap_size
+
+    quilted_block = np.copy(block_next)
+    for row in range(block_row):
+        print "left until:%s" % boundary[row]
+        for col in range(block_col):
+            if col < boundary[row]:
+                quilted_block[row,col] = overlap_left[row,col]
+
+    cv2.imshow("quilted_block", quilted_block)
+    PutBlock(o_synth_array, o_cur_row, o_cur_col, quilted_block)
+    return (block_next.shape[0],block_next.shape[1]-overlap_size)
+
+def align_up(in_val, in_base):
+    return int(in_base*math.ceil((1.0*in_val)/in_base))
+
 ###################################################
 def main():
-    input_fname  = str(sys.argv[1])
-    block_size   = int(sys.argv[2])
-    overlap_size = int(sys.argv[3])
-    err_threshold = float(sys.argv[4])
+    input_fname       = str(sys.argv[1])
+    block_side_length = int(sys.argv[2])
+    overlap_size      = int(sys.argv[3])
+    err_threshold     = float(sys.argv[4])
+    print "overlap_size:%s" % overlap_size
 
     i_texture = cv2.imread(input_fname)
-    i_texture_row = i_texture.shape[0]
-    i_texture_col = i_texture.shape[1]
-    required_blocks = (i_texture_row*i_texture_col)/(block_size**2)
 
-    o_synth_col = i_texture_col*2
-    o_synth_row = i_texture_row*2
-    o_synth = np.zeros((o_synth_row,o_synth_col,3), np.uint8)
-    print "input dim : %sx%s"%(i_texture_col,i_texture_row)
+    i_texture_height_rows = i_texture.shape[0]
+    i_texture_width_cols = i_texture.shape[1]
+
+    o_synth_row = align_up(i_texture_height_rows,block_side_length)
+    o_synth_col = align_up(i_texture_width_cols,block_side_length)
+
+    required_blocks =  (o_synth_row*o_synth_col) / (block_side_length**2)
+
+    o_synth_array = np.zeros((o_synth_row,o_synth_col,3), np.uint8)
+
+    print "input dim : %sx%s"%(i_texture_width_cols,i_texture_height_rows)
     print "output dim: %sx%s (%s blocks)"%(o_synth_col,o_synth_row, required_blocks)
-    #block = PickBlock(0, 0, i_texture, block_size)
-    #PutBlock(0, 0, block, o_synth)
 
-    for o_cur_row in range(0, o_synth_row, block_size):
-        for o_cur_col in range(0, o_synth_col, block_size):
+    o_cur_row = 0
+    o_cur_col = 0
+    while o_cur_row < o_synth_row:
+        while o_cur_col < o_synth_col:
+            left_overlap = GetLeftOverlap(
+                                       o_synth_array
+                                      ,o_cur_row
+                                      ,o_cur_col
+                                      ,block_side_length
+                                      ,overlap_size
+                                      )
+            if left_overlap is not None:
+                cv2.imshow('left_overlap',left_overlap)
 
-            block_left  = GetBlockLeft(o_cur_row, o_cur_col, o_synth, block_size)
-            block_above = GetBlockAbove(o_cur_row, o_cur_col, o_synth, block_size)
+            above_overlap = GetAboveOverlap(
+                                        o_synth_array
+                                       ,o_cur_row
+                                       ,o_cur_col
+                                       ,block_side_length
+                                       ,overlap_size
+                                       )
             best_blocks = BlockSelect(
-                             block_left
-                            ,block_above
+                             left_overlap
+                            ,above_overlap
                             ,i_texture
-                            ,o_synth
-                            ,block_size
+                            ,o_synth_array
+                            ,block_side_length
                             ,overlap_size
                             ,err_threshold
                             )
-            if len(best_blocks) > 0:
-                best_location = random.choice(best_blocks)
-                block_next = GetBlock(
-                                      best_location[0]
-                                     ,best_location[1]
-                                     ,i_texture
-                                     ,block_size
+            if not best_blocks:
+                break
+            block_next = random.choice(best_blocks)
+            cv2.imshow('block_next',block_next)
+
+            ovrlp_next = GetVertOverlapNext(block_next,overlap_size)
+            cv2.imshow('overlap_next',ovrlp_next)
+            boundaries = MinimumErrorCut(
+                                       left_overlap
+                                      ,above_overlap
+                                      ,ovrlp_next
+                                      ,overlap_size
+                                      )
+            ovrlp_qlt = QuiltBlockLeft(
+                                      left_overlap
+                                     ,block_next
+                                     ,boundaries
+                                     ,o_cur_row
+                                     ,o_cur_col
+                                     ,o_synth_array
+                                     ,overlap_size
                                      )
-                boundaries = MinimumErrorCut(
-                                           block_left
-                                          ,block_above
-                                          ,block_next
-                                          ,overlap_size
-                                          )
-                block_qlt = QuiltBlockAbove(
-                                          block_above
-                                         ,block_next
-                                         ,boundaries
-                                         )
-                PutBlock(
-                          o_cur_row
-                         ,o_cur_col
-                         ,block_qlt
-                         ,o_synth
-                        )
-
-
+            #o_cur_row += ovrlp_qlt[0]
+            o_cur_col += ovrlp_qlt[1]
+            img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
+            cv2.imshow('Generated Image',img_zoomed)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        break
+    cv2.imwrite('out.png',o_synth_array)
 
 main()
