@@ -11,6 +11,7 @@ import numpy as np
 from random import randint
 from scipy.spatial import distance
 
+
 def PickInitialBlock(off_row, off_col, texture, block_side_length):
     texture_row = texture.shape[0]
     texture_col = texture.shape[1]
@@ -177,6 +178,12 @@ def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrl
 #
 #    return o_synth_array
 
+#   . . . . . . .
+#   . . . . . . .
+#   . . _ _ . . .
+#   . . _ _ . . .
+#
+#
 def GetBlock(texture, off_row, off_col, block_row_height, block_col_width):
     out = np.zeros((block_row_height,block_col_width,3), np.uint8)
     out = texture[off_row:off_row+block_row_height,
@@ -201,16 +208,25 @@ def GetHorzOvrlp(texture, off_row, off_col, block_side_length, ovrlp_size):
     print "row:%03s" % off_row
     if off_row <0:
         return None
-    return GetBlock(texture, off_row, off_col, ovrlp_size, block_side_length)
+
+    rv = GetBlock(texture, off_row, off_col, ovrlp_size, block_side_length)
+    return rv
 
 
 def GetVertOvrlp(texture, off_row, off_col, block_side_length, ovrlp_size):
     off_col -= ovrlp_size
     print "col:%03s" % off_col
     if off_col < 0:
-        #print "no blocks found at the Left"
         return None
-    return GetBlock(texture, off_row, off_col, block_side_length, ovrlp_size)
+
+    if off_row > 0:
+        off_row -= block_side_length-ovrlp_size
+        if off_row < 0:
+            return None
+
+    rv = GetBlock(texture, off_row, off_col, block_side_length, ovrlp_size)
+    return rv
+
 
 
 ##########################################################################
@@ -232,22 +248,21 @@ def displayw(name, block):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-# 2.1 Minimum Error Boundary Cut
+# 2.1 Minimum Error Vertical Boundary Cut
 ###########################
-# E
-# . . . . @ . . . . . . . .
-# . . . @ . . . . . . . . .
-# . . . . @ . . . . . . . .
-# . . . @ . . . . . . . . .
-# . . . @ . . . . . . . . .
-# . . @ . . . . . . . . . .
-# . . . @ . . . . . . . . .
-# . . . . @ . . . . . . . .
-# . . . . @ . . . . . . . .
-# . . . . . @ . . . . . . .
-# . . . . . @ . . . . . . .
-# . . . . @ . . . . . . . .
-# . . . . @ . . . . . . . .
+# . . . . E . . . . . . . .
+# . . . V . . . . . . . . .
+# . . . . V . . . . . . . .
+# . . . V . . . . . . . . .
+# . . . V . . . . . . . . .
+# . . V . . . . . . . . . .
+# . . . V . . . . . . . . .
+# . . . . V . . . . . . . .
+# . . . . V . . . . . . . .
+# . . . . . V . . . . . . .
+# . . . . . V . . . . . . .
+# . . . . V . . . . . . . .
+# . . . . V . . . . . . . .
 ###########################
 
 # E[2,2] = e[2,2] + Min {E[1,1], E[1,2],E[1,3]}
@@ -267,6 +282,7 @@ def MinVertCumulativeError(ovrlp_left, ovrlp_next, ovrlp_size):
             if row == 0:
                 Cost[row,col] = Ev
                 continue
+
             if col == 0 :
                 Cost[row,col] = Ev + \
                             min(
@@ -290,18 +306,17 @@ def MinVertCumulativeError(ovrlp_left, ovrlp_next, ovrlp_size):
     return (Cost - cost_min)/(cost_max - cost_min)
 
 
-# 2.1 Minimum Error Boundary Cut
+# 2.1 Minimum Error Horizontal Boundary Cut
 ###########################
-# E
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
-# . . . . . . . . @ . . . .
-# . . . . . . @ @ . @ @ . .
-# . @ @ . . @ . . . . . @ @
-# @ . . @ @ . . . . . . . .
+# . . . . . . . . H . . . .
+# . . . . . . H H . H H . .
+# . H H . . H . . . . . H H
+# E . . H H . . . . . . . .
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
 # . . . . . . . . . . . . .
@@ -326,6 +341,7 @@ def MinHorzCumulativeError(ovrlp_above, ovrlp_next, ovrlp_size):
             if col == 0:
                 Cost[row,col] = Ev
                 continue
+
             if row == 0 :
                 Cost[row,col] = Ev + \
                             min(
@@ -349,7 +365,7 @@ def MinHorzCumulativeError(ovrlp_above, ovrlp_next, ovrlp_size):
     return (Cost - cost_min)/(cost_max - cost_min)
 
 
-def FindMinVertCostPath(Cost):
+def FindMinCostVertPath(Cost):
     rows = Cost.shape[0]
     min_error_cut = np.zeros(rows,np.uint8)
     argmin_col = np.argmin(Cost[-1:],axis=1)[0]
@@ -372,7 +388,7 @@ def FindMinVertCostPath(Cost):
 
 
 
-def FindMinHorzCostPath(Cost):
+def FindMinCostHorzPath(Cost):
     cols = Cost.shape[1]
     min_error_cut = np.zeros(cols,np.uint8)
 #
@@ -391,7 +407,7 @@ def FindMinHorzCostPath(Cost):
         look_into = Cost[row:row+nb_elem, col-1]
         argmin_row = np.argmin(look_into)
         min_error_cut[col-1] = row + argmin_row
-        #print "HORZ: %s --> %s --> %s" %(row, look_into, row+argmin_row)
+        print "HORZ: %s --> %s --> %s" %(row, look_into, row+argmin_row)
     return min_error_cut
 
 ############################################################################
@@ -405,7 +421,7 @@ def MinimumErrorCut(block_left, block_above, block_vert_next, block_horz_next, o
                                          ,block_vert_next
                                          ,ovrlp_size
                                          )
-        VertBoundary = FindMinVertCostPath(VertCost)
+        VertBoundary = FindMinCostVertPath(VertCost)
         return (VertBoundary,None)
 
     elif block_left is None:
@@ -414,7 +430,7 @@ def MinimumErrorCut(block_left, block_above, block_vert_next, block_horz_next, o
                                          ,block_horz_next
                                          ,ovrlp_size
                                          )
-        HorzBoundary = FindMinHorzCostPath(HorzCost)
+        HorzBoundary = FindMinCostHorzPath(HorzCost)
         return (None,HorzBoundary)
 
     else:
@@ -428,29 +444,29 @@ def MinimumErrorCut(block_left, block_above, block_vert_next, block_horz_next, o
                                          ,block_horz_next
                                          ,ovrlp_size
                                          )
-        VertBoundary = FindMinVertCostPath(VertCost)
-        HorzBoundary = FindMinHorzCostPath(HorzCost)
+        VertBoundary = FindMinCostVertPath(VertCost)
+        HorzBoundary = FindMinCostHorzPath(HorzCost)
         return (VertBoundary,HorzBoundary)
 
 ###################################################
 ###########################
-# @ @ @ @ @ @ @ @ @ @ @ @ @
-# @ @ @ @ @ @ @ @ @ @ @ @ @
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
-# @ @ . . . . . . . . . . .
+# H H H H H H H H H H H H H
+# H H H H H H H h H H H H H
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
+# V V . . . . . . . . . . .
 ###########################
 
-def QuiltBlock(overlap_left, overlap_above, block_next, boundaries, o_cur_row, o_cur_col, o_synth_array, ovrlp_size):
-    if overlap_left is None and overlap_above is None:
+def QuiltBlock(ovrlp_left, ovrlp_above, block_next, boundaries, o_cur_row, o_cur_col, o_synth_array, ovrlp_size):
+    if ovrlp_left is None and ovrlp_above is None:
         PutBlock(o_synth_array, o_cur_row, o_cur_col, block_next)
         return block_next.shape
 
@@ -466,7 +482,7 @@ def QuiltBlock(overlap_left, overlap_above, block_next, boundaries, o_cur_row, o
         for row in range(block_row):
             for col in range(block_col):
                 if col < boundary_vert[row]:
-                    quilted_block[row,col] = overlap_left[row,col]
+                    quilted_block[row,col] = ovrlp_left[row,col]
         o_cur_col -= ovrlp_size
         block_col -= ovrlp_size
 
@@ -475,7 +491,7 @@ def QuiltBlock(overlap_left, overlap_above, block_next, boundaries, o_cur_row, o
             #print "horiz until:%s" % boundary_horz[col]
             for row in range(block_row):
                 if row < boundary_horz[col]:
-                    quilted_block[row,col] = overlap_above[row,col]
+                    quilted_block[row,col] = ovrlp_above[row,col]
         o_cur_row -= ovrlp_size
         block_row -= ovrlp_size
 
@@ -488,8 +504,8 @@ def align_up(in_val, in_base):
     return int(in_base*math.ceil((1.0*in_val)/in_base))
 
 
-#def QuiltBlockLeft(overlap_left, block_next, boundaries, o_cur_row, o_cur_col, o_synth_array, ovrlp_size):
-#    if overlap_left is None:
+#def QuiltBlockLeft(ovrlp_left, block_next, boundaries, o_cur_row, o_cur_col, o_synth_array, ovrlp_size):
+#    if ovrlp_left is None:
 #        print "QuiltBlockLeft:leftmost block"
 #        PutBlock(o_synth_array, o_cur_row, o_cur_col, block_next)
 #        return block_next.shape
@@ -504,7 +520,7 @@ def align_up(in_val, in_base):
 #        print "left until:%s" % boundary[row]
 #        for col in range(block_col):
 #            if col < boundary[row]:
-#                quilted_block[row,col] = overlap_left[row,col]
+#                quilted_block[row,col] = ovrlp_left[row,col]
 #
 #    cv2.imshow("quilted_block", quilted_block)
 #    PutBlock(o_synth_array, o_cur_row, o_cur_col, quilted_block)
@@ -537,32 +553,27 @@ def main():
     while o_cur_row < o_synth_row:
         o_cur_col = 0
         while o_cur_col < o_synth_col:
-            if o_cur_row > 1 and o_cur_col >16:
-                sys.exit(0)
-            vert_ovrlp = GetVertOvrlp(
+            #if o_cur_row > 1 and o_cur_col >16:
+            #    print "all done"
+            #    sys.exit(0)
+
+            block_prev_vert_ovrlp = GetVertOvrlp(
                                        o_synth_array
                                       ,o_cur_row
                                       ,o_cur_col
                                       ,block_side_length
                                       ,ovrlp_size
                                       )
-            if vert_ovrlp is not None:
-                cv2.imshow('vert_ovrlp',vert_ovrlp)
-
-            horz_ovrlp = GetHorzOvrlp(
+            block_prev_horz_ovrlp = GetHorzOvrlp(
                                         o_synth_array
                                        ,o_cur_row
                                        ,o_cur_col
                                        ,block_side_length
                                        ,ovrlp_size
                                        )
-            if horz_ovrlp is not None:
-                cv2.imshow('horz_ovrlp', horz_ovrlp)
-                cv2.waitKey(0)
-
             best_blocks = BlockSelect(
-                             vert_ovrlp
-                            ,horz_ovrlp
+                             block_prev_vert_ovrlp
+                            ,block_prev_horz_ovrlp
                             ,i_texture
                             ,o_synth_array
                             ,block_side_length
@@ -574,29 +585,33 @@ def main():
                 break
 
             block_next = random.choice(best_blocks)
+
+            block_next_vert_ovrlp = GetVertOvrlpNext(
+                                            block_next
+                                           ,ovrlp_size
+                                           )
+
+            block_next_horz_ovrlp = GetHorzOvrlpNext(
+                                            block_next
+                                           ,ovrlp_size
+                                           )
+            if block_prev_vert_ovrlp is not None:
+                cv2.imshow('block_prev_vert_ovrlp',block_prev_vert_ovrlp)
+            if block_prev_horz_ovrlp is not None:
+                cv2.imshow('block_prev_horz_ovrlp',block_prev_horz_ovrlp)
             cv2.imshow('block_next',block_next)
-
-            ovrlp_vert_next = GetVertOvrlpNext(
-                                            block_next
-                                           ,ovrlp_size
-                                           )
-            cv2.imshow('ovrlp_vert_next',ovrlp_vert_next)
-
-            ovrlp_horz_next = GetHorzOvrlpNext(
-                                            block_next
-                                           ,ovrlp_size
-                                           )
-            cv2.imshow('ovrlp_horz_next',ovrlp_horz_next)
+            cv2.imshow('block_next_vert_ovrlp',block_next_vert_ovrlp)
+            cv2.imshow('block_next_horz_ovrlp',block_next_horz_ovrlp)
             boundaries = MinimumErrorCut(
-                                       vert_ovrlp
-                                      ,horz_ovrlp
-                                      ,ovrlp_vert_next
-                                      ,ovrlp_horz_next
+                                       block_prev_vert_ovrlp
+                                      ,block_prev_horz_ovrlp
+                                      ,block_next_vert_ovrlp
+                                      ,block_next_horz_ovrlp
                                       ,ovrlp_size
                                       )
             ovrlp_qlt = QuiltBlock(
-                                   vert_ovrlp
-                                  ,horz_ovrlp
+                                   block_prev_vert_ovrlp
+                                  ,block_prev_horz_ovrlp
                                   ,block_next
                                   ,boundaries
                                   ,o_cur_row
