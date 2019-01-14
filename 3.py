@@ -2,13 +2,11 @@
 
 # https://people.eecs.berkeley.edu/~efros/research/quilting/quilting.pdf
 
-import time
 import math
-import random
 import cv2
 import sys
 import numpy as np
-from random import randint
+import random
 from scipy.spatial import distance
 
 def GetLeftStrip(block,ovrlp_size):
@@ -54,15 +52,14 @@ def BlockSelect_1(block_left, block_above, texture, synth, block_side_length, ov
 
     # Initial block
     if block_above is None and block_left is None:
-        random_block_row = randint(0, texture_row - block_side_length)
-        random_block_col = randint(0, texture_col - block_side_length)
+        random_block_row = random.randint(0, texture_row - block_side_length)
+        random_block_col = random.randint(0, texture_col - block_side_length)
         rv = GetBlock(texture
                      ,random_block_row
                      ,random_block_col
                      ,block_side_length
                      ,block_side_length
                      )
-        #print rv.shape[1]
         return [rv]
 
     elif block_above is None:
@@ -125,7 +122,7 @@ def BlockSelect_1(block_left, block_above, texture, synth, block_side_length, ov
                     PixelList.append(block_next)
     return PixelList
 
-def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrlp_size, err_threshold):
+def BlockSelect(block_left, block_above, texture, block_side_length, ovrlp_size, err_threshold):
     PixelList = []
     texture_row = texture.shape[0]
     texture_col = texture.shape[1]
@@ -134,8 +131,8 @@ def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrl
 
     # Initial block
     if block_above is None and block_left is None:
-        random_block_row = randint(0, texture_row - block_side_length)
-        random_block_col = randint(0, texture_col - block_side_length)
+        random_block_row = random.randint(0, texture_row - block_side_length)
+        random_block_col = random.randint(0, texture_col - block_side_length)
         rv = GetBlock(texture
                      ,random_block_row
                      ,random_block_col
@@ -155,11 +152,8 @@ def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrl
 
                 if np.less(error_Vertical,err_v/2).all():
                     return [block_next]
-                #if  (error_Vertical<err_v).sum()>(16*2):
                 if np.less(error_Vertical,err_v).all():
                     PixelList.append(block_next)
-                #else:
-                #    print "error_vertical:\n%s" % error_Vertical
 
     elif block_left is None:
         ovrlp_above = GetBottomStrip(block_above,ovrlp_size)
@@ -173,8 +167,6 @@ def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrl
                     return [block_next]
                 if np.less(error_Horizntl,err_h).all():
                     PixelList.append(block_next)
-                #else:
-                #    print "error_horizontal:\n%s" % error_Horizntl
     else:
         ovrlp_above = GetBottomStrip(block_above,ovrlp_size)
         ovrlp_left = GetRightStrip(block_left,ovrlp_size)
@@ -195,43 +187,11 @@ def BlockSelect(block_left, block_above, texture, synth, block_side_length, ovrl
 
                 if (np.less(error_Vertical,err_v).all()
                 and np.less(error_Horizntl,err_h).all()
-                #if ( (error_Vertical<err_v).sum()>(16*3)
-                #and  (error_Horizntl<err_h).sum()>(16*3)
                    ):
                     PixelList.append(block_next)
 
     return PixelList
 
-#def diff(block_left, block_next, ovrlp_size):
-#    ovrlp_0 = block_left[-ovrlp_size:]
-#    ovrlp_1 = block_next[:ovrlp_size]
-#    err =  ovrlp_0 - ovrlp_1
-#
-#    return err
-
-
-#def PickBlock(off_row, off_col, texture, block_side_length):
-#    if off_row==0 and off_col==0:
-#        return PickInitialBlock(off_row, off_col, texture, block_side_length)
-#
-#    texture_row = texture.shape[0]
-#    texture_col = texture.shape[1]
-#
-#    randomPatch_x = randint(0, texture_row - block_side_length)
-#    randomPatch_y = randint(0, texture_col - block_side_length)
-#    o_synth_array = np.zeros((block_side_length,block_side_length,3), np.uint8)
-#    for x in range(block_side_length):
-#        for y in range(block_side_length):
-#            o_synth_array[x, y] = texture[randomPatch_x + x, randomPatch_y + y]
-#
-#    return o_synth_array
-
-#   . . . . . . .
-#   . . . . . . .
-#   . . _ _ . . .
-#   . . _ _ . . .
-#
-#
 def GetBlock(texture, off_row, off_col, block_row_height, block_col_width):
     if ( off_row < 0
       or off_col < 0
@@ -262,29 +222,7 @@ def PutBlock(out, off_row, off_col, block):
         off_col:off_col+block_col
        ] = block
 
-def GetHorzOvrlp(texture, off_row, off_col, block_side_length, ovrlp_size):
-    off_row -= ovrlp_size
-    print "row:%03s" % off_row
-    if off_row <0:
-        return None
 
-    rv = GetBlock(texture, off_row, off_col, ovrlp_size, block_side_length)
-    return rv
-
-
-def GetVertOvrlp(texture, off_row, off_col, block_side_length, ovrlp_size):
-    off_col -= ovrlp_size
-    print "col:%03s" % off_col
-    if off_col < 0:
-        return None
-
-    if off_row > 0:
-        off_row -= block_side_length-ovrlp_size
-        if off_row < 0:
-            return None
-
-    rv = GetBlock(texture, off_row, off_col, block_side_length, ovrlp_size)
-    return rv
 
 
 
@@ -309,13 +247,6 @@ def SSD(row, col, block_A, block_B):
     #dist = ((diff_r**2 + diff_g**2 + diff_b**2)/3.0)
     dist = (0.2125 *(diff_r**2) + 0.7154*(diff_g**2) + 0.0721*(diff_b**2))**0.5
     return dist
-
-def display(name, block):
-    cv2.imshow(name,block)
-def displayw(name, block):
-    cv2.imshow(name,block)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
 
 def Normalize(Cost):
     cost_min = Cost.min()
@@ -648,34 +579,13 @@ def align_up(in_val, in_base):
     return int(in_base*math.ceil((1.0*in_val)/in_base))
 
 
-#def QuiltBlocksLeft(ovrlp_left, block_next, boundaries, cur_synth_row, cur_synth_col, o_synth_array, ovrlp_size):
-#    if ovrlp_left is None:
-#        print "QuiltBlocksLeft:leftmost block"
-#        PutBlock(o_synth_array, cur_synth_row, cur_synth_col, block_next)
-#        return block_next.shape
-#
-#    block_row = block_next.shape[0]
-#    block_col = block_next.shape[1]
-#    boundary  = boundaries[0]
-#    cur_synth_col -= ovrlp_size
-#
-#    quilted_block = np.copy(block_next)
-#    for row in range(block_row):
-#        print "left until:%s" % boundary[row]
-#        for col in range(block_col):
-#            if col < boundary[row]:
-#                quilted_block[row,col] = ovrlp_left[row,col]
-#
-#    cv2.imshow("quilted_block", quilted_block)
-#    PutBlock(o_synth_array, cur_synth_row, cur_synth_col, quilted_block)
-#    return (block_next.shape[0],block_next.shape[1]-ovrlp_size)
-
 ###################################################
 def main():
     input_fname       = str(sys.argv[1])
     block_side_length = int(sys.argv[2])
-    ovrlp_size      = int(sys.argv[3])
+    ovrlp_size        = int(sys.argv[3])
     err_threshold     = float(sys.argv[4])
+
     print "ovrlp_size:%s" % ovrlp_size
 
     i_texture = cv2.imread(input_fname)
@@ -700,7 +610,6 @@ def main():
             print "GetBlock: row:%s col:%s..+%s +%s" % (cur_synth_row, cur_synth_col-block_side_length, block_side_length, block_side_length)
             img_zoomed=cv2.resize(o_synth_array, (256,256), interpolation=cv2.INTER_NEAREST )
             cv2.imshow('Synth Array Before',img_zoomed)
-            #GetBlock: row:16 col:16..16 16
 
             block_left = GetBlock(
                                     o_synth_array
@@ -729,10 +638,9 @@ def main():
             cur_err_threshold = err_threshold
             while True:
                 best_blocks = BlockSelect(
-                                block_prev_vert_ovrlp
+                                 block_prev_vert_ovrlp
                                 ,block_prev_horz_ovrlp
                                 ,i_texture
-                                ,o_synth_array
                                 ,block_side_length
                                 ,ovrlp_size
                                 ,cur_err_threshold
